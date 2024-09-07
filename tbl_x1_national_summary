@@ -1,0 +1,45 @@
+library(tidyverse)
+library(tidycensus)
+
+data_dir <- c('/Users/ani/Documents/phd/research/scovronick/air_health/data/')
+plot_dir <- c('/Users/ani/Documents/phd/research/scovronick/air_health/plots/')
+
+# exposure
+oz <- read.csv(paste0(data_dir, 'ozone_summer.csv'))
+pm <- read.csv(paste0(data_dir, 'county_PM2.5.csv'))
+
+demo <- get_acs(variables = c('B01003_001'), 
+	year = 2017, geography = 'county')
+
+var_df <- data.frame(
+	variable = c('B01003_001'),
+	var_name = c('total')
+)
+
+demo_df <- left_join(demo, var_df) %>%
+	dplyr::select(-moe, -variable) %>%
+	pivot_wider(names_from = var_name, values_from = estimate) %>%
+	mutate(GEOID = as.numeric(GEOID)) %>%
+	left_join(dplyr::select(pm, STNAME, GEOID = FIPS, X2017, REF2050, NZ2050, NZ2050RCP))
+
+pm_sum <- summarize(demo_df,
+	X2017 = weighted.mean(x = X2017, w = total, na.rm = TRUE),
+	REF2050 = weighted.mean(x = REF2050, w = total, na.rm = TRUE),
+	NZ2050 = weighted.mean(x = NZ2050, w = total, na.rm = TRUE),
+	NZ2050RCP = weighted.mean(x = NZ2050RCP, w = total, na.rm = TRUE)) %>%
+	mutate(pol = 'pm2.5')
+
+demo_df <- left_join(demo, var_df) %>%
+	dplyr::select(-moe, -variable) %>%
+	pivot_wider(names_from = var_name, values_from = estimate) %>%
+	mutate(GEOID = as.numeric(GEOID)) %>%
+	left_join(dplyr::select(oz, STNAME, GEOID = FIPS, X2017, REF2050, NZ2050, NZ2050RCP))
+
+oz_sum <- summarize(demo_df,
+	X2017 = weighted.mean(x = X2017, w = total, na.rm = TRUE),
+	REF2050 = weighted.mean(x = REF2050, w = total, na.rm = TRUE),
+	NZ2050 = weighted.mean(x = NZ2050, w = total, na.rm = TRUE),
+	NZ2050RCP = weighted.mean(x = NZ2050RCP, w = total, na.rm = TRUE)) %>%
+	mutate(pol = 'ozone')
+
+write.csv(bind_rows(pm_sum, oz_sum), paste0(data_dir, 'pop_weight_pol_scenario_summaries.csv'))

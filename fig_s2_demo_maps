@@ -1,0 +1,54 @@
+# set up environment
+libs <- c('viridis', 'tidycensus', 'raster', 'sf', 'tidyverse', 'exactextractr', 'ggridges', 'forcats', 'ggpubr', 
+	'ggrepel', 'gridExtra')
+lapply(libs, library, character.only = TRUE)
+
+plot_dir <- c('/Users/ani/Documents/phd/research/scovronick/air_health/plots/')
+
+
+#'B19013_001': MEDIAN HOUSEHOLD INCOME IN THE PAST 12 MONTHS (IN 2017 INFLATION-ADJUSTED DOLLARS)
+# B02001_003: Black; B02001_001: Total
+options(tigris_use_cache = TRUE)
+demo<- get_acs(variables = c('B01003_001', 'B02001_001', 'B02001_002'), 
+		year = 2017, geography = 'county', geometry = TRUE)
+demo$variable <- ifelse(demo$variable == 'B01003_001', 'income',
+	ifelse(demo$variable == 'B02001_001', 'total', 'white'))
+demo <- demo %>%
+	dplyr::select(-moe) %>%
+	pivot_wider(names_from = variable, values_from = estimate) %>%
+	mutate(nonwhite_pct = 1 - (white/total))
+demo$income_cat <- ifelse(demo_sf$income <= quantile(demo_sf$income, c(0.1)), 'Bottom 10%',
+	ifelse(demo$income > quantile(demo_sf$income, c(0.9)), 'Top 10%', 'Middle 80%'))
+demo$race_cat <- ifelse(demo$nonwhite_pct <= quantile(demo$nonwhite_pct, c(0.1)), 'Bottom 10%',
+	ifelse(demo$nonwhite_pct > quantile(demo$nonwhite_pct, c(0.9)), 'Top 10%', 'Middle 80%'))
+demo_sf <- get_acs(variables = c('B02001_003'), 
+		year = 2017, geography = 'county', geometry = TRUE)
+demo_sf <- left_join(demo_sf, demo)
+
+gg_income <- ggplot() +
+	geom_sf(data = demo_sf, aes(fill = income_cat), lwd = 0) +
+	coord_sf() +
+	theme_bw() +
+	scale_fill_manual(name = 'Median HH Income', values = c('#d95f02', '#7570b3', '#1b9e77')) +
+	xlab('') + ylab('') +
+	theme(axis.text = element_blank(), axis.ticks = element_blank()) +
+	xlim(-125, -65) + ylim(25, 50) +
+	labs(tag = 'B')
+
+gg_race <- ggplot() +
+	geom_sf(data = demo_sf, aes(fill = race_cat), lwd = 0) +
+	coord_sf() +
+	theme_bw() +
+	scale_fill_manual(name = 'Percent Non-White', values = c('#d95f02', '#7570b3', '#1b9e77')) +
+	xlab('') + ylab('') +
+	theme(axis.text = element_blank(), axis.ticks = element_blank()) +
+	xlim(-125, -65) + ylim(25, 50) +
+	labs(tag = 'A')
+
+
+jpeg(paste0(plot_dir, '/fig_s2_', Sys.Date(), '.jpg'), width = 9, height = 10, quality = 1, units = 'in', res = 300)
+print(
+	ggarrange(plotlist = list(gg_race, gg_income), ncol = 1)
+)
+dev.off()
+
